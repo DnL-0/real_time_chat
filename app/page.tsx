@@ -6,7 +6,7 @@
 //   signed in -> the chat home
 import { useAuth } from '@/lib/AuthContext';
 import AuthScreen from '@/components/AuthScreen';
-import ChatHome from '@/components/ChatHome';
+import ChatLayout from '@/components/ChatLayout';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -19,5 +19,5 @@ export default function Home() {
     );
   }
 
-  return user ? <ChatHome /> : <AuthScreen />;
+  return user ? <ChatLayout /> : <AuthScreen />;
 }
