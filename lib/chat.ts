@@ -11,11 +11,13 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   type Timestamp,
 } from 'firebase/firestore';
@@ -23,8 +25,9 @@ import { db } from './firebase';
 
 export type UserProfile = {
   uid: string;
-  displayName: string;
+  username: string;
   email: string;
+  lastActive?: Timestamp | null; // heartbeat timestamp, used for presence
 };
 
 // The minimum we need to know about the person on the other side of a chat.
@@ -54,11 +57,31 @@ export function conversationId(a: string, b: string): string {
   return [a, b].sort().join('_');
 }
 
-/** Live list of all registered users (used for the "start a chat" search). */
-export function subscribeUsers(callback: (users: UserProfile[]) => void) {
-  return onSnapshot(collection(db, 'users'), (snap) => {
-    callback(snap.docs.map((d) => d.data() as UserProfile));
+/**
+ * Look up a single user by their exact username (case-insensitive). Returns null
+ * if nobody has claimed it. This is the only way to discover someone — we never
+ * download the whole user directory, so people can't browse/enumerate each other.
+ */
+export async function findUserByUsername(username: string): Promise<UserProfile | null> {
+  const key = username.trim().toLowerCase();
+  if (!key) return null;
+  const mapping = await getDoc(doc(db, 'usernames', key));
+  if (!mapping.exists()) return null;
+  const uid = mapping.data().uid as string;
+  const profile = await getDoc(doc(db, 'users', uid));
+  return profile.exists() ? (profile.data() as UserProfile) : null;
+}
+
+/** Live subscription to one user's profile doc (used for presence in the header). */
+export function subscribeUserDoc(uid: string, callback: (user: UserProfile) => void) {
+  return onSnapshot(doc(db, 'users', uid), (snap) => {
+    if (snap.exists()) callback(snap.data() as UserProfile);
   });
+}
+
+/** Heartbeat: mark this user as recently active. Called periodically while online. */
+export async function touchPresence(uid: string) {
+  await updateDoc(doc(db, 'users', uid), { lastActive: serverTimestamp() }).catch(() => {});
 }
 
 /** Live list of the current user's conversations, newest activity first. */

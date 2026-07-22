@@ -6,14 +6,10 @@
 // later (Step 3). Firebase persists the session, so onAuthStateChanged in
 // AuthContext will flip the whole app over to the chat view automatically.
 import { useState } from 'react';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-} from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { signUp } from '@/lib/auth';
 
 function friendlyError(code: string): string {
   switch (code) {
@@ -36,7 +32,7 @@ function friendlyError(code: string): string {
 
 export default function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -47,32 +43,18 @@ export default function AuthScreen() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
-    if (isSignup && !displayName.trim()) {
-      setError('Please choose a display name.');
-      return;
-    }
-
     setBusy(true);
     try {
       if (isSignup) {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const name = displayName.trim();
-        await updateProfile(cred.user, { displayName: name });
-        // Save a lightweight, searchable profile for the user directory.
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          uid: cred.user.uid,
-          displayName: name,
-          displayNameLower: name.toLowerCase(),
-          email: email.trim(),
-          createdAt: serverTimestamp(),
-        });
+        await signUp(username, email, password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
       // On success, AuthContext takes over and renders the chat view.
     } catch (err) {
-      setError(err instanceof FirebaseError ? friendlyError(err.code) : 'Something went wrong.');
+      if (err instanceof FirebaseError) setError(friendlyError(err.code));
+      else if (err instanceof Error) setError(err.message);
+      else setError('Something went wrong.');
     } finally {
       setBusy(false);
     }
@@ -99,15 +81,18 @@ export default function AuthScreen() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignup && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Display name</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Username</label>
               <input
                 type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="How others will see you"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. jane_doe"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                autoComplete="nickname"
+                autoComplete="username"
               />
+              <p className="mt-1 text-xs text-gray-400">
+                Unique. 3–20 letters, numbers, or underscores. Others find you by this.
+              </p>
             </div>
           )}
 

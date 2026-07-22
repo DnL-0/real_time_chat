@@ -4,13 +4,22 @@
 // composer. Subscribes to Firestore so new messages (from either side) appear
 // instantly, and auto-scrolls to the newest one.
 import { useEffect, useRef, useState } from 'react';
-import { subscribeMessages, sendMessage, type Message, type Peer } from '@/lib/chat';
-import { initials } from '@/lib/format';
+import {
+  subscribeMessages,
+  subscribeUserDoc,
+  sendMessage,
+  type Message,
+  type Peer,
+  type UserProfile,
+} from '@/lib/chat';
+import { initials, presenceFromLastActive } from '@/lib/format';
 
 export default function ChatWindow({ me, peer }: { me: Peer; peer: Peer }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [peerDoc, setPeerDoc] = useState<UserProfile | null>(null);
+  const [, setTick] = useState(0); // forces presence to re-evaluate over time
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Re-subscribe whenever the selected peer changes.
@@ -20,6 +29,21 @@ export default function ChatWindow({ me, peer }: { me: Peer; peer: Peer }) {
     const unsub = subscribeMessages(convoId, setMessages);
     return unsub;
   }, [me.uid, peer.uid]);
+
+  // Watch the peer's profile for live presence.
+  useEffect(() => {
+    setPeerDoc(null);
+    return subscribeUserDoc(peer.uid, setPeerDoc);
+  }, [peer.uid]);
+
+  // Re-check presence periodically so "online" flips to "last seen" when their
+  // heartbeat goes stale (no snapshot fires when someone simply leaves).
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const presence = presenceFromLastActive(peerDoc?.lastActive);
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -45,11 +69,19 @@ export default function ChatWindow({ me, peer }: { me: Peer; peer: Peer }) {
     <section className="flex h-full flex-1 flex-col bg-gray-50">
       {/* Header */}
       <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-pink-500 text-sm font-semibold text-white">
-          {initials(peer.displayName)}
+        <div className="relative">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-pink-500 text-sm font-semibold text-white">
+            {initials(peer.displayName)}
+          </div>
+          {presence.online && (
+            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
+          )}
         </div>
         <div>
           <p className="font-semibold text-gray-900">{peer.displayName}</p>
+          <p className={`text-xs ${presence.online ? 'text-green-600' : 'text-gray-400'}`}>
+            {presence.label}
+          </p>
         </div>
       </header>
 

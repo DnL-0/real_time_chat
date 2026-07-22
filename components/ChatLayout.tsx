@@ -4,6 +4,7 @@
 // and passes it down. Shown by app/page.tsx once a user is logged in.
 import { useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { usePresence } from '@/lib/presence';
 import type { Peer } from '@/lib/chat';
 import Sidebar from './Sidebar';
 import ChatWindow from './ChatWindow';
@@ -11,6 +12,9 @@ import ChatWindow from './ChatWindow';
 export default function ChatLayout() {
   const { user } = useAuth();
   const [peer, setPeer] = useState<Peer | null>(null);
+
+  // Keep our own presence heartbeat alive while signed in.
+  usePresence(user?.uid);
 
   // useAuth guarantees a user here (page.tsx only renders this when signed in).
   const me: Peer = {
