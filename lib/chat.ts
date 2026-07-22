@@ -17,7 +17,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
   type Timestamp,
 } from 'firebase/firestore';
@@ -70,18 +69,6 @@ export async function findUserByUsername(username: string): Promise<UserProfile 
   const uid = mapping.data().uid as string;
   const profile = await getDoc(doc(db, 'users', uid));
   return profile.exists() ? (profile.data() as UserProfile) : null;
-}
-
-/** Live subscription to one user's profile doc (used for presence in the header). */
-export function subscribeUserDoc(uid: string, callback: (user: UserProfile) => void) {
-  return onSnapshot(doc(db, 'users', uid), (snap) => {
-    if (snap.exists()) callback(snap.data() as UserProfile);
-  });
-}
-
-/** Heartbeat: mark this user as recently active. Called periodically while online. */
-export async function touchPresence(uid: string) {
-  await updateDoc(doc(db, 'users', uid), { lastActive: serverTimestamp() }).catch(() => {});
 }
 
 /** Live list of the current user's conversations, newest activity first. */
