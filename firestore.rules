@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Security rules for the chat app. Everything requires a signed-in user, and
+// people can only touch data they're a part of. Note: reads/writes here are
+// evaluated on Firebase's servers, so these rules are the real protection —
+// the client can't bypass them.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // User profiles. A signed-in user can fetch a single profile by uid (needed
+    // to open a chat or show a search result), but CANNOT list the collection —
+    // so nobody can enumerate/browse all users.
+    match /users/{uid} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // Username -> uid claims. A single claim can be read to resolve a search;
+    // the app never lists them. A name can be claimed once, by its owner, and
+    // is then immutable (this is what makes usernames unique).
+    match /usernames/{name} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // A 1-to-1 conversation and its messages. Only the two participants may
+    // read or write anything under it.
+    match /conversations/{convoId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create, update: if isSignedIn()
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2;
+
+      match /messages/{messageId} {
+        function conversationParticipants() {
+          return get(/databases/$(database)/documents/conversations/$(convoId)).data.participants;
+        }
+        allow read: if isSignedIn() && request.auth.uid in conversationParticipants();
+        allow create: if isSignedIn()
+          && request.auth.uid in conversationParticipants()
+          && request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false; // messages are immutable
+      }
+    }
+  }
+}

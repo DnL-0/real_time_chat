@@ -10,7 +10,7 @@ import {
   deleteUser,
   updateProfile,
 } from 'firebase/auth';
-import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
@@ -22,12 +22,9 @@ export async function signUp(username: string, email: string, password: string) 
   }
   const nameLower = name.toLowerCase();
 
-  // Fast, friendly pre-check. The transaction below is the real guarantee.
-  const taken = await getDoc(doc(db, 'usernames', nameLower));
-  if (taken.exists()) {
-    throw new Error('That username is already taken.');
-  }
-
+  // Create the auth account first so the claim below runs authenticated (the
+  // security rules require it). The transaction is the single source of truth
+  // for uniqueness — it atomically checks and claims the username.
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
   try {
     await runTransaction(db, async (tx) => {
